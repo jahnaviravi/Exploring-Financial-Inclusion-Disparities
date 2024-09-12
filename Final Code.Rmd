@@ -1,0 +1,590 @@
+---
+title: "FE582_Project"
+author: "Jahnavi Ravi"
+date: "2023-04-23"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# General Steps
+
+```{r}
+# Set the working directory to the folder containing the csv file
+setwd("D:/STEVENS/Spring 2023/FA 582/Project")
+# Get the current working directory
+getwd()
+```
+```{r}
+# Load the required libraries
+library(readxl)
+library(ggplot2)
+library(ggcorrplot)
+library(dplyr)
+library(doBy)
+library(countrycode)
+library(class)
+library(caret)
+```
+
+```{r}
+# Function for group wise statistics
+siterange <- function(x){
+  c(length(x),min(x),max(x),mean(x),median(x))
+}
+
+# Function to convert to percentages
+percent <- function(x){
+  x*100
+}
+```
+
+```{r}
+# Set Theme for All Plots
+theme_set(theme_bw()) 
+# Center Title for All Plots
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+# Data Cleaning
+
+```{r}
+# Read the financial inclusion data from the excel file
+data <- read_excel("Data.xlsx")
+```
+
+```{r}
+# Convert year column into factor of 4 levels
+year_levels <- c("2011","2014","2017","2021")
+data$year <- factor(data$year, levels = year_levels)
+```
+
+```{r}
+# Convert all data into numeric, except NA data
+data <- data %>% mutate_if(is.numeric, ~ifelse(is.na(.), NA, as.numeric(.)))
+```
+
+```{r}
+# Select the 10 most important indicators for further analysis
+ind <- c("countrynewwb", "codewb", "year", "incomegroupwb21", "account_t_d",
+         "borrow_any","fin1_t_d", "fin4_8_t", "fin2_7_t_d","fin9N_10N_t_d",
+         "Internet", "fin17a_17a1_d", "Own_phone", "save_any")
+data_ind <- data[ind]
+```
+
+```{r}
+# Relabel the columns for ease of understanding
+names(data_ind) <- c("Country","Code","Year","Income_group", "Account",
+                      "Borrowed_Money", "Fin_Inst_Account","Used_card",
+                      "Owns_card", "Inactive_account","Internet",
+                      "Saved_Fin_Inst_or_Money_account", "Owns_Phone", 
+                      "Saved_money")
+```
+
+```{r}
+# Add a new column called "Continent"
+data_ind$Continent <- suppressWarnings(countrycode(sourcevar = data_ind$Code, origin = "iso3c", destination = "continent", nomatch = NA))
+
+unmatched_code <- which(is.na(data_ind$Continent))
+data_ind <- data_ind[-unmatched_code,]
+```
+
+```{r}
+# Change the position of the continent column from last to 3rd 
+data_ind <- data_ind %>% select(Country, Code, Continent, everything())
+```
+
+```{r}
+# Convert income group into a factor with 4 levels
+income_levels <- c("Low income", "Lower middle income", "Upper middle income",
+                   "High income")
+data_ind$Income_group <- factor(data_ind$Income_group, levels = income_levels)
+```
+
+```{r}
+# Select countries of interest in Africa
+ctry_africa <- c("EGY","MLI","TUN","ZAF","ZWE","MOZ")
+
+# Select countries of interest in Europe
+ctry_europe <- c("ALB","DEU","NOR","UKR","GBR")
+
+# Select countries of interest in Asia
+ctry_asia <- c("ARE","CHN","IND","JPN","MMR","SGP")
+
+# Select countries of interest in Americas
+ctry_am <- c("CAN","MEX","NIC","USA","ARG","BRA","COL","PER")
+
+# Select countries of interest in Oceania
+ctry_oce <- c("AUS","NZL")
+```
+
+```{r}
+# Data with all indicators from selected countries
+data_ctry <- subset(data, codewb %in% c(ctry_africa, ctry_europe, ctry_asia, 
+                                        ctry_am, ctry_oce))
+```
+
+```{r}
+# Data with 10 imp indicators from selected countries
+data_years <- subset(data_ind, Code %in% c(ctry_africa, ctry_europe, 
+                                             ctry_asia,ctry_am,
+                                             ctry_oce))
+```
+
+## Fully Cleaned Data Set
+
+```{r}
+# Data from year 2021 
+final_data <- subset(data_years, Year == 2021)
+```
+
+```{r}
+# Change the values in the dataframe into numeric 
+final_data <- final_data %>% mutate_at(vars(6:15),as.numeric)
+
+# Multiply the values by 100 to reflect percentages
+final_data <- final_data %>% mutate_at(vars(6:15), percent)
+```
+
+```{r}
+# Use a correlation plot to understand relationship between diff indicators
+cor_data <- cor(final_data[,15:6], use = "complete.obs")
+ggcorrplot(cor_data)
+```
+## As expected, the % of people having an inactive account is negatively correlated with all of the other indicators. However, it seems to be negatively correlated the most to having Internet access and using a credit or debit card.
+
+## Apart from this, the only strong correlation seems to be between having a financial institution account and owning or using a credit/debit card.
+
+```{r}
+# Summary statistics of % of people having an account based on country income 
+summary_acc <- summaryBy(Account ~ Income_group, final_data, FUN = siterange)
+colnames(summary_acc) <- c("Income","Count","Min","Max","Mean","Median")
+summary_acc
+```
+
+```{r}
+# Summary statistics of % of people having an financial institution account based on country income 
+summary_acc <- summaryBy(Fin_Inst_Account ~ Income_group, final_data, FUN = siterange)
+colnames(summary_acc) <- c("Income","Count","Min","Max","Mean","Median")
+summary_acc
+```
+
+```{r}
+# Summary statistics of % of people that owns a card based on country income 
+summary_card <- summaryBy(Owns_card~Income_group, final_data, FUN = siterange)
+colnames(summary_card) <- c("Income","Count","Min","Max","Mean","Median")
+summary_card
+```
+
+```{r}
+# Summary statistics of % of people that used a card based on country income 
+summary_card <- summaryBy(Used_card~Income_group, final_data, FUN = siterange)
+colnames(summary_card) <- c("Income","Count","Min","Max","Mean","Median")
+summary_card
+```
+
+```{r}
+# Summary statistics of % of people having internet access based on country income 
+summary_ph <- summaryBy(Internet ~ Income_group, final_data,FUN = siterange)
+colnames(summary_ph) <- c("Income","Count","Min","Max","Mean","Median")
+summary_ph
+```
+
+```{r}
+# Summary statistics of % of people owning a phone based on country income 
+summary_ph <- summaryBy(Owns_Phone ~ Income_group, final_data,FUN = siterange)
+colnames(summary_ph) <- c("Income","Count","Min","Max","Mean","Median")
+summary_ph
+```
+
+```{r}
+# Plot summary statistics based on continent
+```
+
+```{r}
+# Summary statistics of % of people having an account based on continent 
+summary_acc2 <- summaryBy(Account ~ Continent, final_data, FUN = siterange)
+colnames(summary_acc2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_acc2
+```
+```{r}
+# Summary statistics of % of people having an financial institution account based on continent 
+summary_acc2 <- summaryBy(Fin_Inst_Account ~ Continent, final_data, FUN = siterange)
+colnames(summary_acc2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_acc2
+```
+```{r}
+# Summary statistics of % of people that owns a card based on country income 
+summary_card2 <- summaryBy(Owns_card ~ Continent, final_data, FUN = siterange)
+colnames(summary_card2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_card2
+```
+
+```{r}
+# Summary statistics of % of people that used a card based on country income 
+summary_card2 <- summaryBy(Used_card ~ Continent, final_data, FUN = siterange)
+colnames(summary_card2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_card2
+```
+```{r}
+# Summary statistics of % of people with internet access based on country income 
+summary_ph2 <- summaryBy(Internet ~ Continent, final_data,FUN = siterange)
+colnames(summary_ph2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_ph2
+```
+
+
+```{r}
+# Summary statistics of % of people owning a phone based on country income 
+summary_ph2 <- summaryBy(Owns_Phone ~ Continent, final_data,FUN = siterange)
+colnames(summary_ph2) <- c("Continent","Count","Min","Max","Mean","Median")
+summary_ph2
+```
+# Account Ownership(%) Plots
+
+```{r}
+# Create a dataframe containing details of account ownership
+data_acc <- na.omit(data_ind[c("Country", "Continent","Income_group", "Year",
+                               "Account")])
+
+# Convert data in account column into numeric and percentages 
+data_acc <- data_acc %>% mutate_at(vars(5),as.numeric)
+if(data_acc[1,5] <= 1) {
+  data_acc <- data_acc %>% mutate_at(vars(5), percent)
+}
+```
+
+```{r}
+# Box Plot for account ownership rates across income groups 
+ggplot(data_acc, aes(x = Income_group, y = Account, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Account ownership (%) in countries based on their economies") + labs(y = "Account Ownership (%)")
+```
+
+## On average, the number of people (15+) having an account in low income countries increased from ~10% in 2011 to ~43% in 2021. 
+
+## As one can see, there is a huge gap between account ownership rates in low income countries like Mali, Mozambique and Yemen compared to high income countries such as Canada, USA or Norway. 
+
+```{r}
+# Box Plot for account ownership rates across continents 
+ggplot(data_acc, aes(x = Continent, y = Account, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Account ownership (%) in countries grouped by continents") + labs(y = "Account Ownership (%)")
+```
+
+# Financial Institution Account(%) Plots
+
+```{r}
+data_fin <- na.omit(data_ind[c("Country", "Continent", "Income_group", "Year",
+                               "Fin_Inst_Account")])
+
+# Convert data in account column into numeric and percentages 
+data_fin <- data_fin %>% mutate_at(vars(5),as.numeric)
+if(data_fin[1,5] <= 1) {
+  data_fin <- data_fin %>% mutate_at(vars(5), percent)
+}
+```
+
+```{r}
+# Box Plot for fin inst. account across income groups 
+ggplot(data_fin, aes(x = Income_group, y = Fin_Inst_Account, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Financial Institute Account ownership (%) in countries based on their economies") + labs(y = "Financial Institute Account Ownership (%)")
+```
+
+## One significant observation is that in upper middle income and high income economies, the financial institute account ownership rates are almost similar to account ownership rates, indicating most people have a bank account
+
+## However in low income economies, the % of people that have a financial institution account is far lesser compared to % of people that have an account
+
+```{r}
+# Box Plot for fin inst. account across continents
+ggplot(data_fin, aes(x = Continent, y = Fin_Inst_Account, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Financial Institute Account ownership (%) in countries grouped by continent") + labs(y = "Financial Institute Account Ownership (%)")
+```
+# Credit/Debit Card ownership (%) Plots
+
+```{r}
+# Create dataframe containing card ownership data
+data_card <- na.omit(data_ind[c("Country", "Continent", "Income_group", "Year",
+                               "Owns_card")])
+
+# Convert data in account column into numeric and percentages 
+data_card <- data_card %>% mutate_at(vars(5),as.numeric)
+if(data_card[1,5] <= 1) {
+  data_card <- data_card %>% mutate_at(vars(5), percent)
+}
+```
+
+```{r}
+# Box Plot for card ownership across income groups 
+ggplot(data_card, aes(x = Income_group, y = Owns_card, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Credit card or Debit card ownership (%) in countries based on their economies") + labs(y = "Card ownership (%)")
+```
+```{r}
+# Box Plot for card ownership across continents
+ggplot(data_card, aes(x = Continent, y = Owns_card, color = factor(Year))) + geom_boxplot() + scale_y_continuous(breaks = seq(0,100,10)) + ggtitle("Credit card or Debit card ownership (%) in countries grouped by continents") + labs(y = "Card ownership (%)")
+```
+
+
+# United States Financial Inclusion Data
+
+```{r}
+# Filter original dataset to contain only data related to United States
+us_data <- data %>% filter(countrynewwb == "United States")
+```
+
+```{r}
+# Subset US data and remove columns with any missing values
+
+# Identify columns with at least one NA value
+cols_with_na <- colSums(is.na(us_data))
+
+# Subset data to exclude columns with at least one NA value
+us_data <- subset(us_data, select = which(colSums(is.na(us_data)) == 0))
+```
+
+```{r}
+# Convert filtered US data into numeric type and percentage values
+us_data <- select(us_data, -c(6,7))
+us_data <- us_data %>% mutate_at(vars(6:93),as.numeric)
+if(us_data[1,6] <= 1) {
+  us_data <- us_data %>% mutate_at(vars(6:93), percent)
+}
+```
+
+```{r}
+# Plot account ownership % across all 4 yrs for United States
+ggplot(us_data, aes(x=year, y=account_t_d)) + geom_point(size=3,color="red") + 
+  geom_line(aes(group = 1)) + labs(x = "Year") + 
+  ggtitle("Account ownership % for United States") + 
+  scale_y_continuous(breaks = seq(86,96,1))
+```
+
+```{r}
+# Compare US to averages of income groups for account ownership %
+avg_data_acc <- data_acc %>% group_by(Income_group, Year) %>% 
+  summarize(avg_data = mean(Account))
+
+ggplot() +
+  geom_point(data = us_data, aes(x = year, y = account_t_d, color = "US"), size = 3) +
+  geom_line(data = us_data, aes(x = year, y = account_t_d, group = "US"), color = "black") +
+  geom_point(data = avg_data_acc, aes(x = Year, y = avg_data, color = Income_group), size = 3) +
+  geom_line(data = avg_data_acc, aes(x = Year, y = avg_data, group = Income_group), color = "black") +
+  labs(x = "Year", y = "Account Ownership (%)", title = "Comparison of US account ownership with average of diff economies") +
+  scale_y_continuous(breaks = seq(0,100,10))
+```
+
+```{r}
+# Plot financial institution account ownership % across all 4 yrs for United States
+ggplot(us_data, aes(x=year, y= fin1_t_d)) + geom_point(size=3,color="red") + 
+  geom_line(aes(group = 1)) + labs(x = "Year") + 
+  ggtitle("Financial Institution Account ownership % for United States") + 
+  scale_y_continuous(breaks = seq(86,96,1))
+```
+
+```{r}
+# Compare US to averages of income groups for financial inst. account ownership %
+avg_data_fin <- data_fin %>% group_by(Income_group, Year) %>% 
+  summarize(avg_data = mean(Fin_Inst_Account))
+
+ggplot() +
+  geom_point(data = us_data, aes(x = year, y = fin1_t_d, color = "US"), size = 3) +
+  geom_line(data = us_data, aes(x = year, y = fin1_t_d, group = "US"), color = "black") +
+  geom_point(data = avg_data_fin, aes(x = Year, y = avg_data, color = Income_group), size = 3) +
+  geom_line(data = avg_data_fin, aes(x = Year, y = avg_data, group = Income_group), color = "black") +
+  labs(x = "Year", y = "Account Ownership (%)", title = "Comparison of US account ownership with average of diff economies") +
+  scale_y_continuous(breaks = seq(0,100,10))
+```
+
+```{r}
+# Plot card ownership % across all 4 yrs for United States
+ggplot(us_data, aes(x=year, y=fin2_7_t_d)) + geom_point(size=3,color="red") + 
+  geom_line(aes(group = 1)) + labs(x = "Year") + 
+  ggtitle("Card ownership % for United States") + 
+  scale_y_continuous(breaks = seq(84,92,1))
+```
+```{r}
+# Compare US to averages of income groups for card ownership %
+avg_data_card <- data_card %>% group_by(Income_group, Year) %>% 
+  summarize(avg_data = mean(Owns_card))
+
+ggplot() +
+  geom_point(data = us_data, aes(x = year, y = fin2_7_t_d, color = "US"), size = 3) +
+  geom_line(data = us_data, aes(x = year, y = fin2_7_t_d, group = "US"), color = "black") +
+  geom_point(data = avg_data_card, aes(x = Year, y = avg_data, color = Income_group), size = 3) +
+  geom_line(data = avg_data_card, aes(x = Year, y = avg_data, group = Income_group), color = "black") +
+  labs(x = "Year", y = "Card Ownership (%)", title = "Comparison of US card ownership with average of diff economies") +
+  scale_y_continuous(breaks = seq(0,100,10))
+```
+
+
+
+# Machine Learning models:
+
+## Creating a new data set for KNN using the cleaned data
+
+```{r}
+data_knn <- subset(data_ind, select = c("Continent","Year","Income_group", "Account", "Fin_Inst_Account", "Owns_card"))
+data_knn <- na.omit(data_knn)
+
+# Convert columns to numeric
+data_knn$Account <- as.numeric(data_knn$Account)
+data_knn$Fin_Inst_Account <- as.numeric(data_knn$Fin_Inst_Account)
+data_knn$Owns_card <- as.numeric(data_knn$Owns_card)
+
+# Converting to percentage values
+
+data_knn$Fin_Inst_Account = data_knn$Fin_Inst_Account*100
+data_knn$Owns_card = data_knn$Owns_card*100
+
+summary(data_knn)
+```
+
+
+```{r}
+# Split data into training and testing sets
+set.seed(123)
+trainIndex <- sample(nrow(data_knn), round(0.7 * nrow(data_knn)))
+
+trainData <- data_knn[trainIndex,]
+testData <- data_knn[-trainIndex,]
+```
+
+## Performing KNN on the data_knn dataset with 3 variables (Account, Fin Inst Account and Owns a card) based on Income group
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Scale the data
+trainData[, 4:6] <- scale(trainData[, 4:6])
+testData[, 4:6] <- scale(testData[, 4:6])
+
+# Train KNN model with all variables
+knnModel1 <- knn(train = trainData[, 4:6], test = testData[, 4:6], cl = trainData$Income_group, k = 9)
+
+# Create a data frame with predicted and actual labels and create a confusion matrix
+results_1 <- data.frame(predicted_1 = as.factor(knnModel1), actual_1 = as.factor(testData$Income_group))
+confusionMatrix(results_1$predicted_1, results_1$actual_1)
+```
+
+## KNN for high income group
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Scale the data
+trainData[, 4:6] <- scale(trainData[, 4:6])
+testData[, 4:6] <- scale(testData[, 4:6])
+
+# Train KNN model with all variables
+knnModel1 <- knn(train = trainData[, 4:6], test = testData[, 4:6], cl = trainData$Income_group, k = 9)
+
+# Subset predicted and actual labels for "high" income group
+predicted_high <- results_1$predicted_1[results_1$actual_1 == "High income"]
+actual_high <- results_1$actual_1[results_1$actual_1 == "High income"]
+
+# Create confusion matrix for "high" income group
+confusionMatrix(predicted_high, actual_high)
+```
+
+## KNN for low income group
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Scale the data
+trainData[, 4:6] <- scale(trainData[, 4:6])
+testData[, 4:6] <- scale(testData[, 4:6])
+
+# Train KNN model with all variables
+knnModel1 <- knn(train = trainData[, 4:6], test = testData[, 4:6], cl = trainData$Income_group, k = 9)
+
+# Subset predicted and actual labels for "low" income group
+predicted_high <- results_1$predicted_1[results_1$actual_1 == "Low income"]
+actual_high <- results_1$actual_1[results_1$actual_1 == "Low income"]
+
+# Create confusion matrix for "low" income group
+confusionMatrix(predicted_high, actual_high)
+```
+
+## Performing KNN on the data_knn dataset with 3 variables (Account, Fin Inst Account and Owns a card) based on Continent
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Scale the data
+trainData[, 4:6] <- scale(trainData[, 4:6])
+testData[, 4:6] <- scale(testData[, 4:6])
+
+# Train KNN model with all variables
+knnModel2 <- knn(train = trainData[, 4:6], test = testData[, 4:6], cl = trainData$Continent, k = 9)
+
+# Create a data frame with predicted and actual labels and create a confusion matrix
+results_2 <- data.frame(predicted_2 = as.factor(knnModel2), actual_2 = as.factor(testData$Continent))
+confusionMatrix(results_2$predicted_2, results_2$actual_2)
+```
+
+## Performing KNN on the data_knn dataset with 3 variables (Account, Fin Inst Account and Owns a card) based on Year
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Scale the data
+trainData[, 4:6] <- scale(trainData[, 4:6])
+testData[, 4:6] <- scale(testData[, 4:6])
+
+# Train KNN model with all variables
+knnModel3 <- knn(train = trainData[, 4:6], test = testData[, 4:6], cl = trainData$Year, k = 6)
+
+# Create a data frame with predicted and actual labels and create a confusion matrix
+results_3 <- data.frame(predicted_3 = as.factor(knnModel3), actual_3 = as.factor(testData$Year))
+confusionMatrix(results_3$predicted_3, results_3$actual_3)
+```
+
+# Decision Tree
+
+## Descision Tree model for the data_knn datset based on Income Groups
+
+```{r}
+# Load libraries and dataset
+library(rpart)
+library(rpart.plot)
+
+# Split dataset into training and testing sets
+set.seed(123)
+train_index <- sample(nrow(data_knn), 0.7 * nrow(data_knn))
+train_data <- data_knn[train_index,]
+test_data <- data_knn[-train_index,]
+
+# Fit decision tree model on training set
+model_tree <- rpart(Income_group ~ ., data = train_data, method = "class")
+
+# Plot the decision tree
+rpart.plot(model_tree)
+model_tree
+
+# Predict on testing set and evaluate performance
+predictions <- predict(model_tree, test_data, type = "class")
+table(predictions, test_data$Income_group)
+```
+
+## Descision Tree model for the data_knn datset based on Continents
+
+```{r}
+# Split dataset into training and testing sets
+set.seed(123)
+train_index <- sample(nrow(data_knn), 0.7 * nrow(data_knn))
+train_data <- data_knn[train_index,]
+test_data <- data_knn[-train_index,]
+
+# Fit decision tree model on training set
+model_tree <- rpart(Continent ~ ., data = train_data, method = "class")
+
+# Plot the decision tree
+rpart.plot(model_tree)
+model_tree
+
+# Predict on testing set and evaluate performance
+predictions <- predict(model_tree, test_data, type = "class")
+table(predictions, test_data$Continent)
+```
+
+
+```
