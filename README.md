@@ -1,4 +1,4 @@
-# Financial Inclusion Data Analysis Project
+# Exploring Financial Inclusion Disparities Across the World
 
 ## Overview
 This project analyzes global financial inclusion data to identify key socioeconomic factors behind disparities in financial access across countries. We used data from the Global Findex Database, published by the World Bank, covering 140 countries over four years (2011, 2014, 2017, 2021).
